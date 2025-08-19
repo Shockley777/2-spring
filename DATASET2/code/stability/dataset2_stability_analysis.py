@@ -18,7 +18,7 @@ RANGE = (500, 3500)           # 面积分布范围
 STEP = 50                    # 每次递增样本数
 MAX_SAMPLE = 50000            # 最大采样数量
 THRESHOLD = 0.001           # 相似度变化阈值（更严格）
-MIN_SIMILARITY = 0.95       # 相似度最低要求（更严格）
+MIN_SIMILARITY = 0.98       # 相似度最低要求（更严格）
 CONSECUTIVE = 5               # 连续几次 Δ < 阈值 判定稳定
 
 # 推荐策略选择: "75th" (75分位数), "90th" (90分位数), "max" (最大值)
@@ -361,7 +361,7 @@ def plot_summary_results(results, stable_sizes, recommended_size):
                           label=f'推荐样本数: {recommended_size}')
         axes[1, 1].axhline(y=1.0, color='gray', linestyle='--', linewidth=1)
         
-        axes[1, 1].set_title(f'所有文件相似度曲线 (共{len(results)}个文件)')
+        axes[1, 1].set_title(f'所有文件稳定性曲线(共{len(results)}个文件)')
         axes[1, 1].set_xlabel('样本数量')
         axes[1, 1].set_ylabel('直方图交集相似度')
         axes[1, 1].legend()
@@ -379,9 +379,9 @@ def plot_summary_results(results, stable_sizes, recommended_size):
 
 # -------- 单独绘制所有文件相似度曲线 --------
 def plot_all_similarity_curves(results, recommended_size):
-    """单独绘制所有文件的相似度曲线"""
+    """单独绘制所有文件的稳定性曲线"""
     if len(results) == 0:
-        print("⚠️ 没有结果数据，无法绘制相似度曲线")
+        print("⚠️ 没有结果数据，无法绘制稳定性曲线")
         return
     
     # 创建更大的图形
@@ -451,7 +451,7 @@ def plot_all_similarity_curves(results, recommended_size):
     
     # 设置图形属性
     stable_count = len([r for r in results if r['stable_sample_size'] != -1])
-    plt.title(f'DATASET2 相似度曲线分析\n(共 {file_count} 个文件，{stable_count} 个有稳定点)', fontsize=16, fontweight='bold')
+    plt.title(f'DATASET2 稳定性曲线分析(共 {file_count} 个文件，{stable_count} 个有稳定点)', fontsize=16, fontweight='bold')
     plt.xlabel('样本数量', fontsize=14)
     plt.ylabel('直方图交集相似度', fontsize=14)
     

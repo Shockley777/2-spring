@@ -18,7 +18,7 @@ RANGE = (500, 3500)           # 面积分布范围
 STEP = 50                    # 每次递增样本数
 MAX_SAMPLE = 50000            # 最大采样数量
 THRESHOLD = 0.001             # 相似度变化阈值
-MIN_SIMILARITY = 0.95      # 相似度最低要求
+MIN_SIMILARITY = 0.98      # 相似度最低要求
 CONSECUTIVE = 5               # 连续几次 Δ < 阈值 判定稳定
 
 # 推荐策略选择: "75th" (75分位数), "90th" (90分位数), "max" (最大值)
