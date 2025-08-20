@@ -91,9 +91,16 @@ logs/
 # Data files (可根据需要调整)
 # *.csv
 # *.xlsx
-# *.png
-# *.jpg
-# *.jpeg
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.svg
 
 # Results and output
 results/

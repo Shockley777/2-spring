@@ -18,7 +18,7 @@ RANGE = (500, 3500)           # 面积分布范围
 STEP = 50                    # 每次递增样本数
 MAX_SAMPLE = 50000            # 最大采样数量
 THRESHOLD = 0.001              # 相似度变化阈值
-MIN_SIMILARITY = 0.95         # 相似度最低要求
+MIN_SIMILARITY = 0.98         # 相似度最低要求
 CONSECUTIVE = 5               # 连续几次 Δ < 阈值 判定稳定
 
 # 推荐策略选择: "75th" (75分位数), "90th" (90分位数), "max" (最大值)
@@ -70,35 +70,23 @@ def analyze_single_file(csv_path, area_col=AREA_COL):
                 print(f"Samples: {n}, Intersection Similarity: {sim:.4f}, Δ = {delta:+.4f}, KL散度: {kl:.4f}")
             prev_hist = hist
         
-        # 判断稳定点（优化策略：优先考虑相似度阈值）
+        # 判断稳定点（与 DATASET1 一致：连续变化+最低相似度）
         deltas = np.abs(np.diff(similarities))
         stable_index = -1
-        
-        # 策略1：优先检查是否有相似度达到阈值的点
-        # 注意：similarities[0]是初始值1.0，从similarities[1]开始才是真正的相似度比较
-        for i in range(1, len(similarities)):  # 从索引1开始，跳过初始值
-            sim = similarities[i]
-            if sim >= MIN_SIMILARITY:
-                stable_index = i * STEP  # 对应的样本数（修正：i对应i*STEP个样本）
-                print(f"   ✓ 在样本数 {stable_index} 处达到稳定 (相似度: {sim:.4f}) - 相似度阈值策略")
+        for i in range(len(deltas) - CONSECUTIVE + 1):
+            # 既要变化小，又要相似度足够高
+            if (np.all(deltas[i:i+CONSECUTIVE] < THRESHOLD) and 
+                similarities[i+CONSECUTIVE] >= MIN_SIMILARITY):
+                stable_index = (i + 1) * STEP
+                print(f"   ✓ 在样本数 {stable_index} 处达到稳定 (相似度: {similarities[i+CONSECUTIVE]:.4f})")
                 break
-        
-        # 策略2：如果没有达到相似度阈值，使用原来的连续变化判断
-        if stable_index == -1:
-            for i in range(len(deltas) - CONSECUTIVE + 1):
-                # 连续变化小且相似度相对较高
-                if (np.all(deltas[i:i+CONSECUTIVE] < THRESHOLD) and 
-                    similarities[i+CONSECUTIVE] >= 0.90):  # 稍微降低要求到0.90
-                    stable_index = (i + CONSECUTIVE) * STEP  # 修正：对应正确的样本数
-                    print(f"   ✓ 在样本数 {stable_index} 处达到稳定 (相似度: {similarities[i+CONSECUTIVE]:.4f}) - 连续变化策略")
-                    break
         
         return {
             'file_path': csv_path,
             'total_cells': len(area_data),
             'stable_sample_size': stable_index,
             'similarities': similarities[1:],
-            'sample_sizes': list(range(STEP, STEP * len(similarities), STEP)),
+            'sample_sizes': list(range(STEP * 2, STEP * (len(similarities) + 1), STEP)),
             'area_data': area_data  # 保存原始数据用于后续分析
         }
         
@@ -157,18 +145,38 @@ def analyze_dataset4_stability():
     stable_sizes = [r['stable_sample_size'] for r in results if r['stable_sample_size'] != -1]
     total_cells = [r['total_cells'] for r in results]
     
-    # 统计信息
+    # 计算推荐样本数（用于后续分类）
+    if stable_sizes:
+        recommended_size_for_classification = int(np.percentile(stable_sizes, 75))
+    else:
+        recommended_size_for_classification = int(np.percentile(total_cells, 50))
+
+    # 分类统计
+    stable_files = [r for r in results if r['stable_sample_size'] != -1]
+    unstable_files = [r for r in results if r['stable_sample_size'] == -1]
+
+    # 进一步分类不稳定文件（使用DATASET4自己的推荐值）
+    insufficient_samples = [r for r in unstable_files if r['total_cells'] < recommended_size_for_classification]
+    poor_quality = [r for r in unstable_files if any(s != s for s in r['similarities'][:3])]  # 有nan值
+    slow_converging = [r for r in unstable_files if r not in insufficient_samples and r not in poor_quality]
+
     print(f"\n📊 统计信息:")
     print(f"   - 总文件数: {len(results)}")
     print(f"   - 找到稳定点的文件数: {len(stable_sizes)}")
     print(f"   - 平均细胞总数: {np.mean(total_cells):.0f}")
     print(f"   - 中位数细胞总数: {np.median(total_cells):.0f}")
-    
     if stable_sizes:
         print(f"   - 稳定样本数范围: {min(stable_sizes)} - {max(stable_sizes)}")
         print(f"   - 稳定样本数中位数: {np.median(stable_sizes):.0f}")
         print(f"   - 稳定样本数平均值: {np.mean(stable_sizes):.0f}")
-        
+
+    print(f"   📊 稳定文件: {len(stable_files)} 个")
+    print(f"   ⚠️  不稳定文件: {len(unstable_files)} 个")
+    print(f"      - 样本量不足: {len(insufficient_samples)} 个 (< {recommended_size_for_classification})")
+    print(f"      - 数据质量问题: {len(poor_quality)} 个") 
+    print(f"      - 缓慢收敛: {len(slow_converging)} 个")
+
+    if stable_sizes:
         # 不同策略的推荐样本数量（确保是STEP的倍数）
         percentile_75_raw = np.percentile(stable_sizes, 75)
         percentile_90_raw = np.percentile(stable_sizes, 90)
