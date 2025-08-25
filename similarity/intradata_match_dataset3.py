@@ -34,7 +34,7 @@ SIMILARITY_METHODS = [
     'pearson',         # 越大越好
     'chi_square',      # 越小越好
     'kl',              # 越小越好
-    'wasserstein',     # 越小越好对的
+    'wasserstein',     # 越小越好
 ]
 DISPLAY_NAMES = {
     'intersection': 'Histogram Intersection',
