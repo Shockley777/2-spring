@@ -48,6 +48,21 @@ DISPLAY_NAMES = {
 HIGHER_BETTER = {'intersection', 'cosine', 'pearson'}
 PLOT_METHOD = 'intersection'
 
+# 统一抽样绘制分布图设置（DATASET2 按 4800 绘制，不足者跳过）
+USE_UNIFIED_SAMPLE_SIZE = True
+UNIFIED_SAMPLE_SIZE = 4800
+
+# 曲线图标签中显示的指标（按顺序，避免过长建议≤4项）
+METRICS_IN_LABEL = ['intersection', 'cosine', 'pearson']
+SHORT_METRIC_NAMES = {
+    'intersection': 'Int',
+    'cosine': 'Cos',
+    'pearson': 'Pear',
+    'chi_square': 'Chi2',
+    'kl': 'KL',
+    'wasserstein': 'Wass',
+}
+
 
 def ensure_dir(path: str) -> None:
     if not os.path.exists(path):
@@ -178,7 +193,7 @@ def main():
     out_dir = get_writable_output_dir(RESULT_DIR, min_free_mb=50)
     ensure_dir(out_dir)
 
-    # 构建所有目标曲线（完整直方图）
+    # 构建所有目标曲线（统一抽样或完整直方图）
     target_histograms: dict[str, np.ndarray] = {}
     for day in ALL_GROUPS_DAYS:
         for data_folder in ALL_GROUPS_DATAFOLDERS:
@@ -186,7 +201,13 @@ def main():
             area = load_area_series(DATASET2_BASE, day, data_folder)
             if area is None:
                 continue
-            hist, _ = build_full_hist(area)
+            if USE_UNIFIED_SAMPLE_SIZE:
+                if area.size < UNIFIED_SAMPLE_SIZE:
+                    # 不足 4800 的组不参与
+                    continue
+                hist, _ = build_hist_from_sample(area, UNIFIED_SAMPLE_SIZE)
+            else:
+                hist, _ = build_full_hist(area)
             target_histograms[key] = hist
 
     if not target_histograms:
@@ -209,7 +230,12 @@ def main():
                 continue
 
             # 决定本组使用的抽样量列表
-            if USE_STABILITY:
+            if USE_UNIFIED_SAMPLE_SIZE:
+                if area.size < UNIFIED_SAMPLE_SIZE:
+                    print(f"⚠️ 跳过 {ref_key}（细胞数 < {UNIFIED_SAMPLE_SIZE}）。")
+                    continue
+                sample_sizes_to_use = [UNIFIED_SAMPLE_SIZE]
+            elif USE_STABILITY:
                 if STABILITY_STRATEGY == 'per_file':
                     ss = stability_map.get(ref_key, None)
                     sample_sizes_to_use = [ss] if ss and ss > 0 else []
@@ -282,7 +308,14 @@ def main():
                 for color, (_, row) in zip(colors, tmp.iterrows()):
                     tgt_hist = target_histograms[row['Compared Folder']]
                     tgt_smooth = gaussian_filter1d(tgt_hist, sigma=2)
-                    plt.plot(x, tgt_smooth, label=f"{row['Compared Folder']} ({row[col_plot]:.3f})", color=color, alpha=0.9)
+                    # 组装多指标标签
+                    parts = []
+                    for m in METRICS_IN_LABEL:
+                        col_name = DISPLAY_NAMES.get(m)
+                        if col_name in row:
+                            parts.append(f"{SHORT_METRIC_NAMES.get(m, m)}={row[col_name]:.3f}")
+                    metrics_text = ", ".join(parts) if parts else f"{col_plot}={row[col_plot]:.3f}"
+                    plt.plot(x, tgt_smooth, label=f"{row['Compared Folder']} ({metrics_text})", color=color, alpha=0.9)
 
                 plt.title(f"DATASET2 Intra Similarity ({col_plot}) | Ref={ref_key} N={sample_size}")
                 plt.xlabel("Cell Area")
@@ -324,13 +357,48 @@ def main():
                         index=folders,
                     )
 
-                    g1 = sns.clustermap(sim_scaled, cmap="Reds", annot=True, fmt=".2f", figsize=(10, 7), metric="euclidean", method="ward")
+                    g1 = sns.clustermap(
+                        sim_scaled,
+                        cmap="Reds",
+                        annot=True,
+                        fmt=".2f",
+                        figsize=(12, 8),
+                        metric="euclidean",
+                        method="ward",
+                    )
+                    # 右侧标签显示与可读性优化（按 DATASET1 做法）
+                    ax1 = g1.ax_heatmap
+                    ax1.yaxis.set_tick_params(labelright=True, labelleft=False, pad=2)
+                    # 强制显示所有行标签
+                    from matplotlib.ticker import FixedLocator
+                    ordered = g1.dendrogram_row.reordered_ind if g1.dendrogram_row else list(range(sim_scaled.shape[0]))
+                    labels = [str(folders.iloc[i]) for i in ordered]
+                    ax1.yaxis.set_major_locator(FixedLocator(np.arange(len(ordered))))
+                    ax1.set_yticklabels(labels)
+                    plt.setp(ax1.get_yticklabels(), rotation=0, ha='left', fontsize=8)
+                    g1.fig.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.05)
                     g1.fig.suptitle(f"Similarity Clustering | Ref={ref_key} N={sample_size}")
                     heat1_path = os.path.join(out_dir, f"{base_name}_similarity_clustermap.png")
                     g1.savefig(heat1_path, dpi=300, bbox_inches="tight")
                     plt.close(g1.fig)
 
-                    g2 = sns.clustermap(dist_scaled, cmap="Blues_r", annot=True, fmt=".2f", figsize=(10, 7), metric="euclidean", method="ward")
+                    g2 = sns.clustermap(
+                        dist_scaled,
+                        cmap="Blues_r",
+                        annot=True,
+                        fmt=".2f",
+                        figsize=(12, 8),
+                        metric="euclidean",
+                        method="ward",
+                    )
+                    ax2 = g2.ax_heatmap
+                    ax2.yaxis.set_tick_params(labelright=True, labelleft=False, pad=2)
+                    ordered2 = g2.dendrogram_row.reordered_ind if g2.dendrogram_row else list(range(dist_scaled.shape[0]))
+                    labels2 = [str(folders.iloc[i]) for i in ordered2]
+                    ax2.yaxis.set_major_locator(FixedLocator(np.arange(len(ordered2))))
+                    ax2.set_yticklabels(labels2)
+                    plt.setp(ax2.get_yticklabels(), rotation=0, ha='left', fontsize=8)
+                    g2.fig.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.05)
                     g2.fig.suptitle(f"Distance Clustering | Ref={ref_key} N={sample_size}")
                     heat2_path = os.path.join(out_dir, f"{base_name}_distance_clustermap.png")
                     g2.savefig(heat2_path, dpi=300, bbox_inches="tight")
