@@ -360,7 +360,7 @@ def main():
         plot_smoothed_histograms(
             day_to_areas,
             hist_range,
-            num_bins=30,
+            num_bins=20,
             smooth_points=300,
             title=title,
             save_dir=save_dir,
