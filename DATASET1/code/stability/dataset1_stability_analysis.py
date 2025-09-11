@@ -15,7 +15,8 @@ warnings.filterwarnings('ignore')
 AREA_COL = "area"             # 面积列
 BINS = 50                     # bin数量
 RANGE = (500, 3500)           # 面积分布范围
-STEP = 50                    # 每次递增样本数
+STEP = 70                    # 每次递增样本数
+EVAL_STEP = 70               # 稳定性判定评估步长（与抽样步长解耦）
 MAX_SAMPLE = 50000            # 最大采样数量
 THRESHOLD = 0.001             # 相似度变化阈值
 MIN_SIMILARITY = 0.98      # 相似度最低要求
@@ -70,16 +71,27 @@ def analyze_single_file(csv_path, area_col=AREA_COL):
                 print(f"Samples: {n}, Intersection Similarity: {sim:.4f}, Δ = {delta:+.4f}, KL散度: {kl:.4f}")
             prev_hist = hist
         
-        # 判断稳定点
-        deltas = np.abs(np.diff(similarities))
-        stable_index = -1
-        for i in range(len(deltas) - CONSECUTIVE + 1):
-            # 既要变化小，又要相似度足够高
-            if (np.all(deltas[i:i+CONSECUTIVE] < THRESHOLD) and 
-                similarities[i+CONSECUTIVE] >= MIN_SIMILARITY):
-                stable_index = (i + 1) * STEP
-                print(f"   ✓ 在样本数 {stable_index} 处达到稳定 (相似度: {similarities[i+CONSECUTIVE]:.4f})")
-                break
+        # 判断稳定点（在评估网格上判定，与抽样步长解耦）
+        curve_sizes = list(range(STEP * 2, STEP * (len(similarities) + 1), STEP))
+        if len(curve_sizes) >= 2:
+            start_eval = int(np.ceil(curve_sizes[0] / EVAL_STEP) * EVAL_STEP)
+            end_eval = curve_sizes[-1]
+            if start_eval <= end_eval:
+                eval_sizes = list(range(start_eval, end_eval + 1, EVAL_STEP))
+                eval_sims = np.interp(eval_sizes, curve_sizes, similarities[1:])
+                deltas = np.abs(np.diff(eval_sims))
+                stable_index = -1
+                for i in range(len(deltas) - CONSECUTIVE + 1):
+                    # 既要变化小，又要相似度足够高
+                    if (np.all(deltas[i:i+CONSECUTIVE] < THRESHOLD) and 
+                        eval_sims[i+CONSECUTIVE] >= MIN_SIMILARITY):
+                        stable_index = eval_sizes[i+CONSECUTIVE]
+                        print(f"   ✓ 在样本数 {stable_index} 处达到稳定 (相似度: {eval_sims[i+CONSECUTIVE]:.4f})")
+                        break
+            else:
+                stable_index = -1
+        else:
+            stable_index = -1
         
         return {
             'file_path': csv_path,

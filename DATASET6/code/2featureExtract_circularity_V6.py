@@ -316,7 +316,7 @@ def process_masks(masks_folder, output_csv_folder, nuclei_folder=None, selected_
         return
 
     # 使用进程池并行处理
-    num_processes = max(1, cpu_count() - 1)  # 保留一个CPU核心
+    num_processes = max(1, cpu_count() - 4)  # 保留一个CPU核心
     print(f"使用 {num_processes} 个进程进行并行处理")
     # 预热一次，便于尽早暴露单文件问题
     if mask_files:

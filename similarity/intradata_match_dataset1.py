@@ -38,6 +38,10 @@ STAB_STEP = 250
 STAB_CONSECUTIVE = 3
 STAB_REPEATS = 3  # 每个样本量重复抽样以降低方差
 
+# 统一抽样绘制分布图设置
+USE_UNIFIED_SAMPLE_SIZE = True
+UNIFIED_SAMPLE_SIZE = 4950
+
 # 指标设置
 SIMILARITY_METHODS = [
     'intersection',    # 越大越好
@@ -241,7 +245,7 @@ def main():
     out_dir = get_writable_output_dir(RESULT_DIR, min_free_mb=50)
     ensure_dir(out_dir)
 
-    # 预先构建所有组的完整直方图（作为被比较对象）
+    # 预先构建所有组的直方图（作为被比较对象）
     target_histograms: dict[str, np.ndarray] = {}
     for day in ALL_GROUPS_DAYS:
         for data_folder in ALL_GROUPS_DATAFOLDERS:
@@ -249,7 +253,13 @@ def main():
             area = load_area_series(DATASET1_BASE, day, data_folder)
             if area is None:
                 continue
-            hist, bins = build_full_hist(area)
+            if USE_UNIFIED_SAMPLE_SIZE:
+                if area.size < UNIFIED_SAMPLE_SIZE:
+                    # 不足 4950 的组不参与绘制/对比
+                    continue
+                hist, bins = build_hist_from_sample(area, UNIFIED_SAMPLE_SIZE)
+            else:
+                hist, bins = build_full_hist(area)
             target_histograms[key] = hist
 
     if not target_histograms:
@@ -274,7 +284,12 @@ def main():
                 continue
 
             # 决定本次要测试的抽样量列表
-            if USE_STABILITY:
+            if USE_UNIFIED_SAMPLE_SIZE:
+                if area.size < UNIFIED_SAMPLE_SIZE:
+                    print(f"⚠️ 跳过 {ref_key}（细胞数 < {UNIFIED_SAMPLE_SIZE}）。")
+                    continue
+                sample_sizes_to_use = [UNIFIED_SAMPLE_SIZE]
+            elif USE_STABILITY:
                 if STABILITY_MODE == 'from_excel':
                     # 根据策略生成样本量列表（以便与多档固定量并行输出一致，仍使用列表）
                     if STABILITY_STRATEGY == 'per_file':
@@ -399,13 +414,23 @@ def main():
                         index=folders,
                     )
 
-                    g1 = sns.clustermap(sim_scaled, cmap="Reds", annot=True, fmt=".2f", figsize=(10, 7), metric="euclidean", method="ward")
+                    g1 = sns.clustermap(sim_scaled, cmap="Reds", annot=True, fmt=".2f", figsize=(12, 8), metric="euclidean", method="ward")
+                    # 右侧标签完整显示与可读性优化
+                    ax1 = g1.ax_heatmap
+                    ax1.yaxis.set_tick_params(labelright=True, labelleft=False, pad=2)
+                    import matplotlib.pyplot as _plt
+                    _plt.setp(ax1.get_yticklabels(), rotation=0, ha='left', fontsize=9)
+                    g1.fig.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.05)
                     g1.fig.suptitle(f"Similarity Clustering | Ref={ref_key} N={sample_size}")
                     heat1_path = os.path.join(out_dir, f"{base_name}_similarity_clustermap.png")
                     g1.savefig(heat1_path, dpi=300, bbox_inches="tight")
                     plt.close(g1.fig)
 
-                    g2 = sns.clustermap(dist_scaled, cmap="Blues_r", annot=True, fmt=".2f", figsize=(10, 7), metric="euclidean", method="ward")
+                    g2 = sns.clustermap(dist_scaled, cmap="Blues_r", annot=True, fmt=".2f", figsize=(12, 8), metric="euclidean", method="ward")
+                    ax2 = g2.ax_heatmap
+                    ax2.yaxis.set_tick_params(labelright=True, labelleft=False, pad=2)
+                    _plt.setp(ax2.get_yticklabels(), rotation=0, ha='left', fontsize=9)
+                    g2.fig.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.05)
                     g2.fig.suptitle(f"Distance Clustering | Ref={ref_key} N={sample_size}")
                     heat2_path = os.path.join(out_dir, f"{base_name}_distance_clustermap.png")
                     g2.savefig(heat2_path, dpi=300, bbox_inches="tight")

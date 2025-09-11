@@ -127,9 +127,8 @@ def process_single_image(args):
         print(f"[{current_index}/{total_count}] {filename}: 开始分割...", flush=True)
         result = model.eval(
             img,
-            diameter=56,
-            flow_threshold=0.5,
-            cellprob_threshold=0.0,
+            flow_threshold=2,
+            cellprob_threshold=-2,
             min_size=10,
             niter=280
         )
@@ -335,7 +334,11 @@ def segment_folder(input_folder, output_folder, use_gpu=True, num_workers=6,
 
 def process_all_day_folders(data_root, mode: str = 'cells', nuclei_rolling_radius: int = 10,
                             input_subdir: str | None = None,
-                            output_subdir: str | None = None):
+                            output_subdir: str | None = None,
+                            hf_max_resize: int = 1000,
+                            hf_niter: int = 250,
+                            hf_flow_threshold: float = 0.4,
+                            hf_cellprob_threshold: float = 0.0):
     """
     处理所有DAY文件夹
     """
@@ -352,17 +355,27 @@ def process_all_day_folders(data_root, mode: str = 'cells', nuclei_rolling_radiu
         d for d in sorted(os.listdir(data_root))
         if os.path.isdir(os.path.join(data_root, d)) and d.strip().lower().startswith('day')
     ]
-    for day_folder in day_folders:
-        images_folder = os.path.join(data_root, day_folder, in_sub)
+    single_day_mode = False
+    if not day_folders and os.path.basename(data_root).strip().lower().startswith('day'):
+        single_day_mode = True
+        day_folders = [os.path.basename(data_root)]
+
+    if single_day_mode:
+        images_folder = os.path.join(data_root, in_sub)
         if os.path.exists(images_folder):
-            total_images_overall += sum(1 for f in os.listdir(images_folder) if f.lower().endswith(valid_extensions))
+            total_images_overall = sum(1 for f in os.listdir(images_folder) if f.lower().endswith(valid_extensions))
+    else:
+        for day_folder in day_folders:
+            images_folder = os.path.join(data_root, day_folder, in_sub)
+            if os.path.exists(images_folder):
+                total_images_overall += sum(1 for f in os.listdir(images_folder) if f.lower().endswith(valid_extensions))
 
     processed_overall = 0
     print(f"将处理 {len(day_folders)} 个 day* 文件夹，共计 {total_images_overall} 张图片。", flush=True)
 
     # 遍历所有DAY文件夹
     for day_folder in day_folders:
-        day_path = os.path.join(data_root, day_folder)
+        day_path = data_root if single_day_mode else os.path.join(data_root, day_folder)
         if os.path.isdir(day_path):
             print(f"\n=== 处理 {day_folder} ===", flush=True)
             
@@ -382,6 +395,10 @@ def process_all_day_folders(data_root, mode: str = 'cells', nuclei_rolling_radiu
                 mode=mode,
                 nuclei_rolling_radius=nuclei_rolling_radius,
                 nuclei_preprocessed=nuclei_preprocessed,
+                hf_max_resize=hf_max_resize,
+                hf_niter=hf_niter,
+                hf_flow_threshold=hf_flow_threshold,
+                hf_cellprob_threshold=hf_cellprob_threshold,
             )
             processed_overall += done
             if total_images_overall > 0:
@@ -420,6 +437,11 @@ def main():
         default=None,
         help="输出子目录名称（默认：cells→masks；nuclei→nuclei）",
     )
+    # 推理参数（与 app 一致）
+    parser.add_argument("--hf-max-resize", type=int, default=1000, help="推理前最长边缩放")
+    parser.add_argument("--hf-niter", type=int, default=250, help="最大迭代次数")
+    parser.add_argument("--hf-flow-threshold", type=float, default=0.4, help="flow threshold")
+    parser.add_argument("--hf-cellprob-threshold", type=float, default=0.0, help="cellprob threshold")
     args = parser.parse_args()
 
     default_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
@@ -432,6 +454,10 @@ def main():
         nuclei_rolling_radius=args.nuclei_rolling_radius,
         input_subdir=args.input_subdir,
         output_subdir=args.output_subdir,
+        hf_max_resize=args.hf_max_resize,
+        hf_niter=args.hf_niter,
+        hf_flow_threshold=args.hf_flow_threshold,
+        hf_cellprob_threshold=args.hf_cellprob_threshold,
     )
     print("\n所有图片处理完成！", flush=True)
 
