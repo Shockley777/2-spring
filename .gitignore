@@ -109,3 +109,7 @@ output/
 # Backup files
 *.bak
 *.backup 
+masks
+nuclei
+processed
+images

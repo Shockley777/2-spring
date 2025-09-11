@@ -12,6 +12,9 @@ catboost>=1.0.0
 # 深度学习库
 torch>=1.9.0
 torchvision>=0.10.0
+segmentation-models-pytorch>=0.3.2
+timm>=0.9.8
+einops>=0.7.0
 
 # 可视化库
 matplotlib>=3.5.0
@@ -30,3 +33,6 @@ shap>=0.40.0
 # 其他工具
 tqdm>=4.62.0
 joblib>=1.1.0 
+albumentations>=1.3.1
+opencv-python>=4.7.0.72
+torchmetrics>=1.3.2
