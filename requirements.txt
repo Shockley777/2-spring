@@ -30,3 +30,8 @@ shap>=0.40.0
 # 其他工具
 tqdm>=4.62.0
 joblib>=1.1.0 
+
+# 可选依赖（图像与多模态管道增强）
+# opencv-python
+# timm
+# segment-anything  # if installing from source: pip install git+https://github.com/facebookresearch/segment-anything.git
