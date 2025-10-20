@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import argparse
 import cv2
 import numpy as np
@@ -9,6 +11,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Optional
 import importlib
+from microalgae.segmentation.cellpose_utils import load_cellpose_model
 
 # 动态导入 huggingface_hub，避免环境未安装时报未解析导入
 try:
@@ -122,7 +125,7 @@ def process_single_image(args):
 
         print(f"[{current_index}/{total_count}] {filename}: 正在加载模型...", flush=True)
         # 每个进程独立初始化模型
-        model = models.CellposeModel(model_type='cpsam', gpu=use_gpu)
+        model = load_cellpose_model('cpsam', gpu=use_gpu)
         
         print(f"[{current_index}/{total_count}] {filename}: 开始分割...", flush=True)
         result = model.eval(
@@ -204,7 +207,7 @@ def segment_folder(input_folder, output_folder, use_gpu=True, num_workers=6,
             if use_hf_app:
                 model = load_hf_app_model(use_gpu=True)
             if model is None:
-                model = models.CellposeModel(model_type='cpsam', gpu=True)
+                model = load_cellpose_model('cpsam', gpu=True)
 
             for idx, img_path in enumerate(img_paths, start=1):
                 filename = os.path.basename(img_path)
